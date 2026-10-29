@@ -5,10 +5,12 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const dns = require("dns");
 
-try {
-  dns.setServers(["8.8.8.8", "8.8.4.4"]);
-} catch (e) {
-  // Ignore
+if (process.platform === "win32") {
+  try {
+    dns.setServers(["8.8.8.8", "8.8.4.4"]);
+  } catch (e) {
+    // Ignore
+  }
 }
 
 const MONGO_URI =
@@ -16,11 +18,28 @@ const MONGO_URI =
 
 console.log("Connecting to MongoDB URI:", MONGO_URI.replace(/:[^:@]+@/, ":****@"));
 
-mongoose
-  .connect(MONGO_URI)
-  .then(() => {
-    console.log("MongoDB Connected Successfully to Atlas!");
-  })
-  .catch((error) => {
+let lastError = null;
+
+const connectDB = async () => {
+  if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) {
+    return;
+  }
+  try {
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+    });
+    lastError = null;
+    console.log("MongoDB Connected Successfully!");
+  } catch (error) {
+    lastError = error.message;
     console.error("MongoDB Connection Error:", error.message);
-  });
+    setTimeout(connectDB, 5000);
+  }
+};
+
+connectDB();
+
+module.exports = {
+  connectDB,
+  getLastError: () => lastError
+};

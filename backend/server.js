@@ -7,7 +7,7 @@ const axios = require("axios");
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 
-require("./database");
+const db = require("./database");
 
 const Chat = require("./Chat");
 const User = require("./user");
@@ -25,6 +25,23 @@ app.get("/", (req, res) => {
 
     res.send("Backend is working");
 
+});
+
+app.get("/db-health", async (req, res) => {
+    const states = ["disconnected", "connected", "connecting", "disconnecting"];
+    let readyState = mongoose.connection.readyState;
+    if (readyState === 0 && db.connectDB) {
+        await db.connectDB();
+        readyState = mongoose.connection.readyState;
+    }
+    res.json({
+        status: states[readyState] || "unknown",
+        connected: readyState === 1,
+        readyState: readyState,
+        uriConfigured: Boolean(process.env.MONGODB_URI),
+        platform: process.platform,
+        error: db.getLastError ? db.getLastError() : null
+    });
 });
 
 
@@ -177,7 +194,8 @@ app.post("/chat", async (req, res) => {
             {
                 question: question,
                 is_detailed: is_detailed
-            }
+            },
+            { timeout: 180000 } // 3 min — allows for cold-start wake-up on Render free tier
         );
 
         const answer =
@@ -530,7 +548,8 @@ app.post("/signup", async (req, res) => {
         }
 
         return res.status(500).json({
-            message: "Signup failed. Please try again."
+            message: "Signup failed. Please try again.",
+            error: error.message
         });
     }
 });
@@ -580,7 +599,8 @@ app.post("/login", async (req, res) => {
         console.log("LOGIN ERROR:", error.message);
 
         return res.status(500).json({
-            message: "Login failed. Please try again."
+            message: "Login failed. Please try again.",
+            error: error.message
         });
     }
 });
